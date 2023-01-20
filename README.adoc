@@ -1,0 +1,74 @@
+== Hibernate Query Timeout Bug
+
+The following application replicates https://hibernate.atlassian.net/browse/HHH-16062.
+
+== Summary
+
+Queries created from a `CriteriaQuery` do not have `jakarta.persistence.query.timeout` values applied.
+
+
+== Steps to replicate
+
+* Install or use Docker to get MySQL running locally on port `3306` with a `root` user and no password.
+* Run `schema.sql` to create a test database
+* Run the `Application` class a notice the output `[test_1, test_2, test_3]`
+* Run the following SQL commands to lock the tables:
+
+[source,sql]
+----
+LOCK TABLES test_table READ;
+LOCK TABLES test_table WRITE;
+----
+
+* Run the `Application` class and the application hangs
+* Kill the application
+* Checkout the `hibernate5` branch
+* Run the `Application` class and notice that the expected timeout exception is thrown
+
+----
+Exception in thread "main" javax.persistence.QueryTimeoutException: could not extract ResultSet
+	at org.hibernate.internal.ExceptionConverterImpl.convert(ExceptionConverterImpl.java:113)
+	at org.hibernate.query.internal.AbstractProducedQuery.list(AbstractProducedQuery.java:1626)
+	at org.hibernate.query.Query.getResultList(Query.java:165)
+	at org.hibernate.query.criteria.internal.compile.CriteriaQueryTypeQueryAdapter.getResultList(CriteriaQueryTypeQueryAdapter.java:76)
+	at com.example.querytimeoutbug.Application.main(Application.java:19)
+Caused by: org.hibernate.QueryTimeoutException: could not extract ResultSet
+	at org.hibernate.exception.internal.SQLExceptionTypeDelegate.convert(SQLExceptionTypeDelegate.java:66)
+	at org.hibernate.exception.internal.StandardSQLExceptionConverter.convert(StandardSQLExceptionConverter.java:37)
+	at org.hibernate.engine.jdbc.spi.SqlExceptionHelper.convert(SqlExceptionHelper.java:113)
+	at org.hibernate.engine.jdbc.spi.SqlExceptionHelper.convert(SqlExceptionHelper.java:99)
+	at org.hibernate.engine.jdbc.internal.ResultSetReturnImpl.extract(ResultSetReturnImpl.java:67)
+	at org.hibernate.loader.Loader.getResultSet(Loader.java:2322)
+	at org.hibernate.loader.Loader.executeQueryStatement(Loader.java:2075)
+	at org.hibernate.loader.Loader.executeQueryStatement(Loader.java:2037)
+	at org.hibernate.loader.Loader.doQuery(Loader.java:956)
+	at org.hibernate.loader.Loader.doQueryAndInitializeNonLazyCollections(Loader.java:357)
+	at org.hibernate.loader.Loader.doList(Loader.java:2868)
+	at org.hibernate.loader.Loader.doList(Loader.java:2850)
+	at org.hibernate.loader.Loader.listIgnoreQueryCache(Loader.java:2682)
+	at org.hibernate.loader.Loader.list(Loader.java:2677)
+	at org.hibernate.loader.hql.QueryLoader.list(QueryLoader.java:540)
+	at org.hibernate.hql.internal.ast.QueryTranslatorImpl.list(QueryTranslatorImpl.java:400)
+	at org.hibernate.engine.query.spi.HQLQueryPlan.performList(HQLQueryPlan.java:219)
+	at org.hibernate.internal.SessionImpl.list(SessionImpl.java:1459)
+	at org.hibernate.query.internal.AbstractProducedQuery.doList(AbstractProducedQuery.java:1649)
+	at org.hibernate.query.internal.AbstractProducedQuery.list(AbstractProducedQuery.java:1617)
+	... 3 more
+Caused by: com.mysql.cj.jdbc.exceptions.MySQLTimeoutException: Statement cancelled due to timeout or client request
+	at com.mysql.cj.jdbc.exceptions.SQLExceptionsMapping.translateException(SQLExceptionsMapping.java:113)
+	at com.mysql.cj.jdbc.StatementImpl.checkCancelTimeout(StatementImpl.java:2167)
+	at com.mysql.cj.protocol.a.NativeProtocol.sendQueryPacket(NativeProtocol.java:1133)
+	at com.mysql.cj.NativeSession.execSQL(NativeSession.java:665)
+	at com.mysql.cj.jdbc.ClientPreparedStatement.executeInternal(ClientPreparedStatement.java:893)
+	at com.mysql.cj.jdbc.ClientPreparedStatement.executeQuery(ClientPreparedStatement.java:972)
+	at org.hibernate.engine.jdbc.internal.ResultSetReturnImpl.extract(ResultSetReturnImpl.java:57)
+	... 18 more
+----
+
+* Run the following SQL commands to unlock the tables:
+
+[source,sql]
+----
+UNLOCK TABLES;
+----
+
